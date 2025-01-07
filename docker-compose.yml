@@ -1,0 +1,33 @@
+services:
+  lobe-chat:
+    image: lobehub/lobe-chat
+    container_name: lobe-chat
+    restart: always
+    ports:
+      - '3210:3210'
+    environment:
+      OPENAI_API_KEY: sk-xxxx
+      OPENAI_PROXY_URL: https://api-proxy.com/v1
+      ACCESS_CODE: lobe66
+#      OLLAMA_PROXY_URL: http://host.docker.internal:11434
+      OLLAMA_HOST: 127.0.0.1:11434
+
+  ollama:
+    image: ollama/ollama
+    container_name: ollama
+    restart: always
+    ports:
+      - '11434:11434'
+    environment:
+      OPENAI_API_KEY: sk-xxxx
+    runtime: nvidia
+    volumes:
+      - ./models:/root/.ollama/models
+
+#    deploy:
+ #    resources:
+  #      reservations:
+   #       devices:
+    #        - capabilities: [gpu]
+
+
