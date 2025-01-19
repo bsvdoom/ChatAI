@@ -11,4 +11,4 @@ sudo systemctl restart docker
 
 ### DISABLE NVIDIA GPU ACCELERATION
 
-Comment out the ``` runtime: nvidia ``` line from ``` docker-compose.yml ```
+Comment out the ``` runtime: nvidia ``` line from `docker-compose.yml`
