@@ -1,0 +1,40 @@
+services:
+
+  lobe-chat:
+    image: lobehub/lobe-chat:latest
+    container_name: lobe-chat
+    restart: unless-stopped
+
+    ports:
+      - "3210:3210"
+
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_PROXY_URL: ${OPENAI_PROXY_URL}
+#      ACCESS_CODE: ${LOBE_ACCESS_CODE}
+
+      OLLAMA_PROXY_URL: http://ollama:11434
+
+    depends_on:
+      - ollama
+
+    networks:
+      - ai
+
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+
+    volumes:
+      - ./ollama:/root/.ollama
+
+    runtime: nvidia
+
+    networks:
+      - ai
+
+
+networks:
+  ai:
