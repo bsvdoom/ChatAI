@@ -183,6 +183,8 @@ services:
       OLLAMA_ORIGINS: ${OLLAMA_ORIGINS:?Set OLLAMA_ORIGINS in .env}
       OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-5m}
 
+      OLLAMA_CONTEXT_LENGTH: 32768
+
     volumes:
       - ./ollama:/root/.ollama
 
