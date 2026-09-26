@@ -1,7 +1,7 @@
 services:
 
   lobe-chat:
-    image: lobehub/lobe-chat:latest
+    image: lobehub/lobehub:latest
     container_name: lobe-chat
     restart: unless-stopped
 
@@ -9,14 +9,162 @@ services:
       - "3210:3210"
 
     environment:
+      APP_URL: ${APP_URL}
+
+      # Server database
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgresql:5432/${LOBE_DB_NAME}
+      DATABASE_DRIVER: node
+      KEY_VAULTS_SECRET: ${KEY_VAULTS_SECRET}
+
+      # Auth secret
+      AUTH_SECRET: ${AUTH_SECRET}
+
+      # Redis
+      REDIS_URL: redis://redis:6379
+      REDIS_PREFIX: lobechat
+      REDIS_TLS: "0"
+
+      # S3 / RustFS
+      S3_ENDPOINT: ${S3_ENDPOINT}
+      S3_PUBLIC_DOMAIN: ${S3_PUBLIC_DOMAIN}
+      S3_BUCKET: lobe
+      S3_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY}
+      S3_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY}
+      S3_ENABLE_PATH_STYLE: "1"
+      S3_SET_ACL: "1"
+
+      # Ha privát/LAN IP-t használsz S3-hoz
+      SSRF_ALLOW_PRIVATE_IP_ADDRESS: "1"
+
+      # OpenAI
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       OPENAI_PROXY_URL: ${OPENAI_PROXY_URL}
-#      ACCESS_CODE: ${LOBE_ACCESS_CODE}
 
-      OLLAMA_PROXY_URL: http://ollama:11434
+      # Ollama
+      OLLAMA_PROXY_URL: ${OLLAMA_PROXY_URL}
 
     depends_on:
-      - ollama
+      postgresql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rustfs:
+        condition: service_healthy
+      rustfs-init:
+        condition: service_completed_successfully
+
+    networks:
+      - ai
+
+
+  postgresql:
+    image: paradedb/paradedb:latest-pg17
+    container_name: lobe-postgres
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: ${LOBE_DB_NAME}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_search
+
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+    networks:
+      - ai
+
+
+  redis:
+    image: redis:7-alpine
+    container_name: lobe-redis
+    restart: unless-stopped
+
+    command: redis-server --save 60 1000 --appendonly yes
+
+    volumes:
+      - redis-data:/data
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+    networks:
+      - ai
+
+
+  rustfs:
+    image: rustfs/rustfs:latest
+    container_name: lobe-rustfs
+    restart: unless-stopped
+
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
+    environment:
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY}
+      RUSTFS_CORS_ALLOWED_ORIGINS: ${RUSTFS_CORS_ALLOWED_ORIGINS}
+
+    command:
+      - --access-key
+      - ${RUSTFS_ACCESS_KEY}
+      - --secret-key
+      - ${RUSTFS_SECRET_KEY}
+      - /data
+
+    volumes:
+      - rustfs-data:/data
+
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget -qO- http://localhost:9000/health >/dev/null 2>&1 || exit 1
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+    networks:
+      - ai
+
+
+  rustfs-init:
+    image: rustfs/rc:latest
+    container_name: lobe-rustfs-init
+
+    depends_on:
+      rustfs:
+        condition: service_healthy
+
+    environment:
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY}
+
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        until /usr/bin/rc alias set rustfs http://rustfs:9000 "$${RUSTFS_ACCESS_KEY}" "$${RUSTFS_SECRET_KEY}"; do
+          echo "Waiting for RustFS..."
+          sleep 2
+        done
+
+        /usr/bin/rc ls rustfs/lobe >/dev/null 2>&1 || /usr/bin/rc mb rustfs/lobe
+
+    restart: "no"
 
     networks:
       - ai
@@ -27,6 +175,14 @@ services:
     container_name: ollama
     restart: unless-stopped
 
+    ports:
+      - "11434:11434"
+
+    environment:
+      OLLAMA_HOST: 0.0.0.0:11434
+      OLLAMA_ORIGINS: ${OLLAMA_ORIGINS}
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-5m}
+
     volumes:
       - ./ollama:/root/.ollama
 
@@ -34,6 +190,12 @@ services:
 
     networks:
       - ai
+
+
+volumes:
+  postgres-data:
+  redis-data:
+  rustfs-data:
 
 
 networks:

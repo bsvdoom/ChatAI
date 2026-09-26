@@ -1,286 +1,178 @@
-# ChatAI
+# LobeHub + Ollama Docker Stack
 
-Simple local AI chat stack using **LobeChat** and **Ollama** with optional **NVIDIA GPU acceleration**.
+Self-hosted LobeHub setup with local Ollama models.
 
-## Components
+## Stack
 
-- LobeChat web UI
-- Ollama local model runtime
-- Docker Compose
-- Optional NVIDIA GPU acceleration
+- LobeHub
+- Ollama + NVIDIA GPU
+- PostgreSQL
+- Redis
+- RustFS S3-compatible storage
+- RustFS CLI for bucket initialization
 
-LobeChat supports self-hosted Docker deployment and Ollama integration:
-- https://lobehub.com/docs/self-hosting/platform/docker
-- https://lobehub.com/docs/usage/providers/ollama
-
-Ollama provides an official Docker image and supports NVIDIA GPU acceleration:
-- https://docs.ollama.com/docker
-- https://github.com/ollama/ollama
-
-## Requirements
-
-- Docker Engine
-- Docker Compose plugin
-- NVIDIA driver + NVIDIA Container Toolkit if GPU acceleration is used
-
-Docker Compose installation:
-- https://docs.docker.com/compose/install/
-
-NVIDIA Container Toolkit installation:
-- https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
-
-## Configuration
-
-Copy the example environment file:
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env` and set the required values.
-
-Example:
-
-```env
-OPENAI_API_KEY=
-OPENAI_PROXY_URL=
-LOBE_ACCESS_CODE=
-```
-
-`LOBE_ACCESS_CODE` is not used ATM.
-
-Docker Compose supports `.env` files for variable interpolation:
-- https://docs.docker.com/compose/how-tos/environment-variables/variable-interpolation/
-
-Do not commit the real `.env` file if it contains credentials or API keys.
+Server-side database + S3 storage is required for full file upload support in LobeHub.
 
 ## Start
 
 ```bash
+docker compose pull
 docker compose up -d
 ```
 
-Check container status:
+Check status:
 
 ```bash
 docker compose ps
 ```
 
-Follow logs:
+Logs:
 
 ```bash
-docker compose logs -f
+docker compose logs --tail=100 lobe-chat
 ```
 
-Open LobeChat in the browser:
+## Environment
 
-```text
-http://localhost:3210
-```
+Secrets and machine-specific settings are stored in `.env`.
 
-Docker Compose command reference:
-- https://docs.docker.com/reference/cli/docker/compose/
-
-## Ollama configuration
-
-Inside the Docker network, LobeChat can reach Ollama by its Compose service name:
-
-```text
-http://ollama:11434
-```
-
-Docker Compose provides DNS-based service discovery between containers on the same Compose network:
-- https://docs.docker.com/compose/how-tos/networking/
-
-In LobeChat, use:
-
-```text
-Interface proxy address: http://ollama:11434
-```
-
-When using the Docker-internal hostname above, keep **Client-Side Fetching Mode disabled**, because the hostname `ollama` is resolvable inside the Docker network rather than directly by the host browser.
-
-## Check installed Ollama models
+Generate safe secrets/passwords with:
 
 ```bash
-docker compose exec ollama ollama list
+openssl rand -hex 24
+openssl rand -base64 32
 ```
 
-The Ollama CLI supports listing locally installed models:
-- https://docs.ollama.com/cli
+Avoid special URI characters in `POSTGRES_PASSWORD`, or percent-encode them, because the password is part of `DATABASE_URL`.
 
-To pull a model:
+## Ollama models
+
+Pull a model manually:
 
 ```bash
-docker compose exec ollama ollama pull llama3.1:8b
+docker exec -it ollama ollama pull qwen3:8b
 ```
 
-Use the exact installed model name/tag shown by `ollama list`.
-
-## NVIDIA GPU acceleration
-
-### Host prerequisites
-
-Install a supported NVIDIA driver first, then install the NVIDIA Container Toolkit.
-
-On Debian/Ubuntu-based systems, after configuring NVIDIA's repository, the toolkit package can be installed with:
+List installed models:
 
 ```bash
-sudo apt-get install -y nvidia-container-toolkit
+docker exec -it ollama ollama list
 ```
 
-Configure the Docker runtime:
+Check currently loaded models:
 
 ```bash
->>>>>>> 66b14be (finalize readme)
-sudo nvidia-ctk runtime configure --runtime=docker
-sudo systemctl restart docker
+docker exec -it ollama ollama ps
 ```
 
-<<<<<<< HEAD
-### DISABLE NVIDIA GPU ACCELERATION
+Enabling a model in LobeHub does not automatically mean it exists in the local Ollama instance. A `404 model not found` error usually means the model still needs to be pulled.
 
-Comment out the `runtime: nvidia` line from `docker-compose.yml`
-=======
-Official NVIDIA instructions:
-- https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
+See `MODELS.md` for a quick model selection guide.
 
-### Verify GPU access
+## VRAM unloading
 
-On the host:
+Ollama keeps models loaded for a short period after the last request.
 
-```bash
-nvidia-smi
+Configured through `.env`:
+
+```env
+OLLAMA_KEEP_ALIVE=2m
 ```
 
-Inside the Ollama container:
-
-```bash
-docker compose exec ollama nvidia-smi
-```
-
-You can also inspect currently loaded Ollama models:
-
-```bash
-docker compose exec ollama ollama ps
-```
-
-Ollama documents NVIDIA GPU support for Docker:
-- https://docs.ollama.com/docker
-
-### Disable NVIDIA GPU acceleration
-
-If `compose.yml` contains:
+and passed to the Ollama container:
 
 ```yaml
-runtime: nvidia
+environment:
+  OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-5m}
 ```
 
-remove or comment out that line, then recreate the containers:
+Examples:
+
+```text
+1m   unload after 1 minute
+2m   unload after 2 minutes
+5m   Ollama default
+0    unload immediately
+```
+
+For a 12 GB GPU with several local models, `2m` is a reasonable compromise between fast model reuse and freeing VRAM.
+
+## Installation notes / issues encountered
+
+### RustFS CORS
+
+File uploads from LobeHub require CORS to be enabled for the `lobe` bucket in RustFS.
+
+Open the RustFS Console (`http://<host>:9001`), select the `lobe` bucket, enable **Bucket CORS**, and allow the LobeHub origin (for example `http://192.168.100.22:3210`) with `GET`, `POST`, `PUT`, `DELETE`, and `HEAD`.
+
+You can verify it with:
 
 ```bash
-docker compose down
+curl -i \
+  -H "Origin: http://192.168.1.22:3210" \
+  http://192.168.1.22:9000/
+```
+
+The response should include Access-Control-Allow-Origin for the LobeHub origin.
+
+### LobeHub database migration failed with `Invalid URL`
+
+Example:
+
+```text
+Database migrate failed
+TypeError: Invalid URL
+```
+
+The PostgreSQL password contained characters that made the generated `DATABASE_URL` invalid.
+
+Fix: use a URL-safe password, for example:
+
+```bash
+openssl rand -hex 24
+```
+
+For a brand-new database volume, recreate the stack after changing the initial PostgreSQL password:
+
+```bash
+docker compose down -v
 docker compose up -d
 ```
 
-Docker also supports GPU device reservations in Compose:
-- https://docs.docker.com/compose/how-tos/gpu-support/
+Do not use `down -v` on an existing installation unless deleting the database/storage volumes is intentional.
+
+### Ollama returned `model ... not found`
+
+Models must be downloaded into Ollama separately:
+
+```bash
+docker exec -it ollama ollama pull MODEL_NAME
+```
+
+Example:
+
+```bash
+docker exec -it ollama ollama pull qwen3:14b
+```
 
 ## Useful commands
 
-Restart the stack:
-
 ```bash
+# Stack status
+docker compose ps
+
+# LobeHub logs
+docker compose logs -f lobe-chat
+
+# Ollama logs
+docker compose logs -f ollama
+
+# Installed models
+docker exec -it ollama ollama list
+
+# Loaded models / VRAM usage
+docker exec -it ollama ollama ps
+
+# Restart the stack
 docker compose restart
 ```
-
-Stop the stack:
-
-```bash
-docker compose down
-```
-
-Pull newer container images:
-
-```bash
-docker compose pull
-docker compose up -d
-```
-
-Show Ollama logs:
-
-```bash
-docker compose logs -f ollama
-```
-
-Show LobeChat logs:
-
-```bash
-docker compose logs -f lobe-chat
-```
-
-## Persistent Ollama data
-
-A typical Ollama volume mapping is:
-
-```yaml
-volumes:
-  - ./ollama:/root/.ollama
-```
-
-Ollama's official Docker documentation persists data under `/root/.ollama`:
-- https://docs.ollama.com/docker
-
-The local `ollama/` directory should normally be excluded from Git because it may contain large downloaded model files.
-
-## Security notes
-
-Keep secrets such as API keys and access codes outside the committed Compose file where possible.
-
-Recommended files to commit:
-
-```text
-compose.yml
-.env.example
-.gitignore
-README.md
-```
-
-Recommended files/directories to ignore:
-
-```text
-.env
-ollama/
-```
-
-Docker documentation covers environment-variable handling and secrets:
-- https://docs.docker.com/compose/how-tos/environment-variables/best-practices/
-- https://docs.docker.com/compose/how-tos/use-secrets/
-
-## Update
-
-```bash
-docker compose pull
-docker compose up -d
-```
-
-Optionally remove unused Docker images:
-
-```bash
-docker image prune
-```
-
-Docker image management documentation:
-- https://docs.docker.com/reference/cli/docker/image/prune/
-
----
-
-## References
-
-- LobeChat self-hosting: https://lobehub.com/docs/self-hosting/platform/docker
-- LobeChat Ollama integration: https://lobehub.com/docs/usage/providers/ollama
-- Ollama Docker: https://docs.ollama.com/docker
-- Ollama CLI: https://docs.ollama.com/cli
-- Docker Compose networking: https://docs.docker.com/compose/how-tos/networking/
-- Docker Compose GPU support: https://docs.docker.com/compose/how-tos/gpu-support/
-- NVIDIA Container Toolkit: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
