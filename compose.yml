@@ -9,15 +9,15 @@ services:
       - "3210:3210"
 
     environment:
-      APP_URL: ${APP_URL}
+      APP_URL: ${APP_URL:?Set APP_URL in .env}
 
       # Server database
-      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgresql:5432/${LOBE_DB_NAME}
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgresql:5432/${LOBE_DB_NAME:?Set LOBE_DB_NAME in .env}
       DATABASE_DRIVER: node
-      KEY_VAULTS_SECRET: ${KEY_VAULTS_SECRET}
+      KEY_VAULTS_SECRET: ${KEY_VAULTS_SECRET:?Set KEY_VAULTS_SECRET in .env}
 
       # Auth secret
-      AUTH_SECRET: ${AUTH_SECRET}
+      AUTH_SECRET: ${AUTH_SECRET:?Set AUTH_SECRET in .env}
 
       # Redis
       REDIS_URL: redis://redis:6379
@@ -25,11 +25,11 @@ services:
       REDIS_TLS: "0"
 
       # S3 / RustFS
-      S3_ENDPOINT: ${S3_ENDPOINT}
-      S3_PUBLIC_DOMAIN: ${S3_PUBLIC_DOMAIN}
+      S3_ENDPOINT: ${S3_ENDPOINT:?Set S3_ENDPOINT in .env}
+      S3_PUBLIC_DOMAIN: ${S3_PUBLIC_DOMAIN:?Set S3_PUBLIC_DOMAIN in .env}
       S3_BUCKET: lobe
-      S3_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY}
-      S3_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY}
+      S3_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY:?Set RUSTFS_ACCESS_KEY in .env}
+      S3_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY:?Set RUSTFS_SECRET_KEY in .env}
       S3_ENABLE_PATH_STYLE: "1"
       S3_SET_ACL: "1"
 
@@ -37,11 +37,11 @@ services:
       SSRF_ALLOW_PRIVATE_IP_ADDRESS: "1"
 
       # OpenAI
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      OPENAI_PROXY_URL: ${OPENAI_PROXY_URL}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_PROXY_URL: ${OPENAI_PROXY_URL:-}
 
       # Ollama
-      OLLAMA_PROXY_URL: ${OLLAMA_PROXY_URL}
+      OLLAMA_PROXY_URL: ${OLLAMA_PROXY_URL:?Set OLLAMA_PROXY_URL in .env}
 
     depends_on:
       postgresql:
@@ -63,8 +63,8 @@ services:
     restart: unless-stopped
 
     environment:
-      POSTGRES_DB: ${LOBE_DB_NAME}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${LOBE_DB_NAME:?Set LOBE_DB_NAME in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
 
     command:
       - postgres
@@ -115,9 +115,9 @@ services:
 
     environment:
       RUSTFS_CONSOLE_ENABLE: "true"
-      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
-      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY}
-      RUSTFS_CORS_ALLOWED_ORIGINS: ${RUSTFS_CORS_ALLOWED_ORIGINS}
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:?Set RUSTFS_ACCESS_KEY in .env}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:?Set RUSTFS_SECRET_KEY in .env}
+      RUSTFS_CORS_ALLOWED_ORIGINS: ${RUSTFS_CORS_ALLOWED_ORIGINS:?Set RUSTFS_CORS_ALLOWED_ORIGINS in .env}
 
     command:
       - --access-key
@@ -150,8 +150,8 @@ services:
         condition: service_healthy
 
     environment:
-      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
-      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY}
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:?Set RUSTFS_ACCESS_KEY in .env}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:?Set RUSTFS_SECRET_KEY in .env}
 
     entrypoint:
       - /bin/sh
@@ -180,7 +180,7 @@ services:
 
     environment:
       OLLAMA_HOST: 0.0.0.0:11434
-      OLLAMA_ORIGINS: ${OLLAMA_ORIGINS}
+      OLLAMA_ORIGINS: ${OLLAMA_ORIGINS:?Set OLLAMA_ORIGINS in .env}
       OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-5m}
 
     volumes:
